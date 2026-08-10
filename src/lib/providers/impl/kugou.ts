@@ -1,13 +1,18 @@
 import axios from 'axios';
+import { Agent } from 'https';
 import { MusicItem, MusicProvider, PlayInfo } from '@/types/music';
+import { validateAudioLink } from '@/lib/providers/audio-link';
 
 const SEARCH_API_URL = 'https://songsearch.kugou.com/song_search_v2';
 const CGG_API_URL = 'https://music-api2.cenguigui.cn/';
+const BAKA_API_URL = 'https://api.baka.plus/meting/';
+const SVIP90_BASE_URL = 'https://music.90svip.cn/';
 const HAITANG_API_URLS = [
   'https://musicapi.haitangw.net/kgqq/kg.php',
   'https://music.haitangw.cc/kgqq/kg.php',
 ];
 const REQUEST_TIMEOUT = 15000;
+const BAKA_HTTPS_AGENT = new Agent({ rejectUnauthorized: false });
 
 const SEARCH_HEADERS = {
   'User-Agent':
@@ -49,14 +54,18 @@ export type KugouLyricData = {
 };
 
 type KugouExtra = {
-  selectedParser?: 'cenguigui' | 'haitang';
+  selectedParser?: KugouParser;
   selectedFormat?: string;
   cover?: string;
 };
 
+type KugouParser = '90svip' | 'baka' | 'cenguigui' | 'haitang';
+
 const KUGOU_DOWNLOAD_OPTIONS = [
-  { value: 'cenguigui', label: '高品质', quality: 'flac/mp3', format: 'flac' },
-  { value: 'haitang', label: '备用', quality: 'flac/mp3', format: 'flac' },
+  { value: '90svip', label: '90svip 默认', quality: '320k/mp3', format: 'mp3' },
+  { value: 'baka', label: 'Baka 备用', quality: 'lossless', format: 'flac' },
+  { value: 'cenguigui', label: '尘归归备用', quality: 'mixed', format: 'mp3' },
+  { value: 'haitang', label: '海棠备用', quality: 'mixed', format: 'mp3' },
 ];
 
 function extractExt(url: string, fallback = 'mp3') {
@@ -110,6 +119,15 @@ function getExtraValue(extra: unknown, key: string) {
   return typeof value === 'string' || typeof value === 'number' ? value : undefined;
 }
 
+function parseSessionCookie(setCookie?: string[] | string) {
+  const values = Array.isArray(setCookie) ? setCookie : setCookie ? [setCookie] : [];
+  for (const value of values) {
+    const match = value.match(/(?:^|[,;]\s*)PHPSESSID=([^;,\s]+)/i);
+    if (match) return `PHPSESSID=${match[1]}`;
+  }
+  return '';
+}
+
 export class KugouProvider implements MusicProvider {
   name = 'kugou';
 
@@ -141,44 +159,33 @@ export class KugouProvider implements MusicProvider {
   async getPlayInfo(id: string, extra?: unknown): Promise<PlayInfo> {
     const fallbackCover = getExtraValue(extra, 'cover') as string | undefined;
     const selectedParser = (extra as KugouExtra | undefined)?.selectedParser;
-    try {
-      if (selectedParser === 'cenguigui') {
-        const info = await this.getByCenguigui(id);
+    const resolvers = {
+      '90svip': () => this.getBy90svip(id),
+      baka: () => this.getByBaka(id),
+      cenguigui: () => this.getByCenguigui(id),
+      haitang: () => this.getByHaitang(id),
+    };
+    const order: KugouParser[] = ['90svip', 'baka', 'cenguigui', 'haitang'];
+    if (selectedParser && order.includes(selectedParser)) {
+      order.splice(order.indexOf(selectedParser), 1);
+      order.unshift(selectedParser);
+    }
+    let lastError: unknown;
+    for (const parser of order) {
+      try {
+        const info = await resolvers[parser]();
         return {
           url: info.url,
           type: extractExt(info.url),
           bitrate: info.bitrate,
           cover: info.cover || fallbackCover,
         };
+      } catch (error) {
+        lastError = error;
+        console.warn(`Kugou ${parser} fallback:`, error);
       }
-      if (selectedParser === 'haitang') {
-        const info = await this.getByHaitang(id);
-        return {
-          url: info.url,
-          type: extractExt(info.url),
-          bitrate: info.bitrate,
-          cover: fallbackCover,
-        };
-      }
-
-      const info = await this.getByCenguigui(id);
-      return {
-        url: info.url,
-        type: extractExt(info.url),
-        bitrate: info.bitrate,
-        cover: info.cover || fallbackCover,
-      };
-    } catch (error) {
-      console.warn('Kugou cenguigui fallback:', error);
     }
-
-    const info = await this.getByHaitang(id);
-    return {
-      url: info.url,
-      type: extractExt(info.url),
-      bitrate: info.bitrate,
-      cover: fallbackCover,
-    };
+    throw lastError || new Error('Failed to get Kugou play url');
   }
 
   async getLyric(id: string, extra?: unknown): Promise<KugouLyricData> {
@@ -231,13 +238,57 @@ export class KugouProvider implements MusicProvider {
       provider: this.name,
       extra: {
         cover,
-        selectedParser: 'haitang',
-        selectedFormat: 'flac',
+        selectedParser: '90svip',
+        selectedFormat: 'mp3',
         qualityOptions: KUGOU_DOWNLOAD_OPTIONS,
         filename: item.FileName || item.filename || `${title} - ${artist}`,
         duration: duration || -1,
       },
     };
+  }
+
+  private async getBy90svip(id: string) {
+    const params = new URLSearchParams({
+      input: id,
+      filter: 'id',
+      type: 'kugou',
+      page: '1',
+    });
+    const response = await axios.post(SVIP90_BASE_URL, params, {
+      headers: {
+        'Accept': 'application/json, text/javascript, */*; q=0.01',
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'Referer': SVIP90_BASE_URL,
+        'User-Agent': SEARCH_HEADERS['User-Agent'],
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      timeout: REQUEST_TIMEOUT,
+    });
+    const item = Array.isArray(response.data?.data) ? response.data.data[0] : undefined;
+    const rawUrl = typeof item?.url === 'string' ? item.url : '';
+    if (!rawUrl) throw new Error('90svip returned no play url');
+    const url = new URL(rawUrl, SVIP90_BASE_URL).toString();
+    const cookie = parseSessionCookie(response.headers['set-cookie']);
+    if (!cookie) throw new Error('90svip returned no PHP session');
+    const verified = await validateAudioLink(url, {
+      headers: {
+        cookie,
+        'Referer': SVIP90_BASE_URL,
+        'User-Agent': SEARCH_HEADERS['User-Agent'],
+      },
+      timeout: REQUEST_TIMEOUT,
+    });
+    return { url: verified.url, bitrate: '320k', cover: undefined };
+  }
+
+  private async getByBaka(id: string) {
+    const url = `${BAKA_API_URL}?server=kugou&type=url&id=${encodeURIComponent(id)}&br=2000`;
+    const verified = await validateAudioLink(url, {
+      headers: SEARCH_HEADERS,
+      httpsAgent: BAKA_HTTPS_AGENT,
+      timeout: REQUEST_TIMEOUT,
+    });
+    return { url: verified.url, bitrate: 'lossless', cover: undefined };
   }
 
   private async getByCenguigui(id: string) {
@@ -248,12 +299,17 @@ export class KugouProvider implements MusicProvider {
       });
       const payload = data?.data || {};
       const url = String(payload.url || '').trim();
-      if (url.startsWith('http') && !extractExt(url).startsWith('m')) {
-        return {
-          url,
-          bitrate: level,
-          cover: typeof payload.pic === 'string' ? payload.pic : undefined,
-        };
+      if (url.startsWith('http')) {
+        try {
+          const verified = await validateAudioLink(url, { headers: SEARCH_HEADERS });
+          return {
+            url: verified.url,
+            bitrate: level,
+            cover: typeof payload.pic === 'string' ? payload.pic : undefined,
+          };
+        } catch {
+          continue;
+        }
       }
     }
     throw new Error('Failed to get cenguigui url');
@@ -270,7 +326,12 @@ export class KugouProvider implements MusicProvider {
           const payload = data?.data || {};
           const url = String(payload.url || '').trim();
           if (url.startsWith('http')) {
-            return { url, bitrate: level };
+            try {
+              const verified = await validateAudioLink(url, { headers: SEARCH_HEADERS });
+              return { url: verified.url, bitrate: level, cover: undefined };
+            } catch {
+              continue;
+            }
           }
         } catch {
         }

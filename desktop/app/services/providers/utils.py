@@ -7,6 +7,9 @@ from urllib.parse import quote, unquote, urljoin, urlparse
 
 from app.models.music import LyricLine
 
+AUDIO_CONTENT_TYPES = ("audio/", "application/octet-stream")
+AUDIO_EXTENSIONS = {"aac", "flac", "m4a", "mp3", "ogg", "opus", "wav"}
+
 
 def clean_text(value: str | None) -> str:
     return re.sub(r"\s+", " ", value or "").strip()
@@ -26,6 +29,34 @@ def absolute_url(value: str | None, base_url: str) -> str | None:
 
 def is_http_url(value: Any) -> bool:
     return isinstance(value, str) and value.startswith("http")
+
+
+def validate_audio_url(
+    http_client: Any,
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    timeout: int = 15,
+    verify: bool = True,
+) -> str:
+    request_headers = {"Range": "bytes=0-1", **(headers or {})}
+    response = http_client.get_response(
+        url,
+        headers=request_headers,
+        timeout=timeout,
+        verify=verify,
+        stream=True,
+    )
+    try:
+        content_type = str(response.headers.get("content-type") or "").lower()
+        if content_type and not content_type.startswith(AUDIO_CONTENT_TYPES):
+            raise ValueError(f"Non-audio content type: {content_type}")
+        final_url = response.url
+        if not content_type and extract_ext(final_url).lower() not in AUDIO_EXTENSIONS:
+            raise ValueError("Audio response has no recognizable content type or extension")
+        return final_url
+    finally:
+        response.close()
 
 
 def safe_json_loads(value: Any) -> Any:

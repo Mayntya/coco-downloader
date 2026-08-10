@@ -2,7 +2,7 @@
 from pathlib import Path
 
 import requests
-from PyQt5.QtCore import QObject, QSize, Qt, QThread, QUrl, pyqtSignal
+from PyQt5.QtCore import QObject, Qt, QThread, QUrl, pyqtSignal
 from PyQt5.QtGui import QColor, QDesktopServices, QPainter, QPainterPath, QPen, QPixmap
 from PyQt5.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout
 
@@ -21,6 +21,7 @@ from qfluentwidgets import (
 )
 
 from app.services.download_service import DownloadTaskInfo, DownloadTaskStatus
+from app.services.remote_asset import get_remote_asset
 
 DEFAULT_COVER = ":/app/images/play_bar/album_200_200.png"
 COVER_TIMEOUT = 10
@@ -45,7 +46,7 @@ class CoverLoadThread(QThread):
         if not self.cover_url.startswith("http"):
             return
         try:
-            response = requests.get(self.cover_url, headers=COVER_HEADERS, timeout=COVER_TIMEOUT)
+            response = get_remote_asset(self.cover_url, headers=COVER_HEADERS, timeout=COVER_TIMEOUT)
             response.raise_for_status()
             if not self.isInterruptionRequested():
                 self.loaded.emit(response.content)

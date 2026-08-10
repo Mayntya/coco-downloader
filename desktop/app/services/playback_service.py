@@ -16,6 +16,7 @@ from app.common.signal_bus import signalBus
 from app.common.setting import CONFIG_FOLDER
 from app.components.play_bar import PlayBar, PlayBarSongInfo, PlaybackMode
 from app.models.music import MusicItem, PlayInfo
+from app.services.remote_asset import get_remote_asset
 from app.services.providers import get_provider
 
 try:
@@ -187,7 +188,7 @@ class CoverThemeThread(QThread):
         try:
             if self.isInterruptionRequested():
                 return
-            response = requests.get(self.cover_url, headers=REQUEST_HEADERS, timeout=COVER_TIMEOUT)
+            response = get_remote_asset(self.cover_url, headers=REQUEST_HEADERS, timeout=COVER_TIMEOUT)
             response.raise_for_status()
             image_bytes = response.content
             if self.isInterruptionRequested():

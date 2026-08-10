@@ -98,8 +98,18 @@ class ProviderHttpClient:
         headers: dict[str, str] | None = None,
         params: dict[str, Any] | None = None,
         timeout: int = DEFAULT_TIMEOUT,
+        verify: bool = True,
+        stream: bool = False,
     ) -> requests.Response:
-        return self._request("get", url, headers=headers, params=params, timeout=timeout)
+        return self._request(
+            "get",
+            url,
+            headers=headers,
+            params=params,
+            timeout=timeout,
+            verify=verify,
+            stream=stream,
+        )
 
     def post_response(
         self,

@@ -23,7 +23,7 @@ from ..services.music_search_service import search_music
 
 PAGE_SIZE = 20
 PAGED_PLATFORMS = {"cenguigui", "XCVTS", "海棠", "netease", "qq-official", "kugou"}
-DOWNLOAD_ONLY_PLATFORMS = {"QQMP3", "力音", "爱听", "qqmp3", "livepoo", "aiting"}
+DOWNLOAD_ONLY_PLATFORMS = {"QQMP3", "力音", "qqmp3", "livepoo"}
 NETEASE_OFFICIAL_PLATFORMS = {"cenguigui", "netease"}
 
 

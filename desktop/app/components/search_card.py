@@ -1,7 +1,7 @@
 # coding: utf-8
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
+from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel
 
 from qfluentwidgets import CaptionLabel, ComboBox, IndeterminateProgressBar, SearchLineEdit, SimpleCardWidget, setFont
 
@@ -51,16 +51,11 @@ class SearchCard(SimpleCardWidget):
             self.tr("音源1"),
             self.tr("音源2"),
             self.tr("音源3"),
-            self.tr("歌曲宝"),
             self.tr("歌曲海"),
-            self.tr("布谷"),
             self.tr("波点"),
             self.tr("QQMP3"),
-            self.tr("米兔"),
-            self.tr("JOOX"),
             self.tr("咪咕"),
             self.tr("力音"),
-            self.tr("爱听"),
             self.tr("煎饼-1"),
             self.tr("煎饼-2"),
         ])
