@@ -211,6 +211,7 @@ desktop/CoCo-downloader-setup.iss
 桌面端界面基于 [QFluentWidgets](https://github.com/zhiyiYo/PyQt-Fluent-Widgets) 构建。QFluentWidgets 为 PyQt/PySide 提供了 Fluent Design 风格的组件、设置卡片、导航、主题和图标体系，让桌面端能够以较低成本获得现代化的 Windows 应用体验。
 
 感谢LINUXDO社区提供的帮助：https://linux.do/
+感谢开源项目musicdl的部分接口支持： https://github.com/CharlesPikachu/musicdl
 
 ## 免责声明
 
